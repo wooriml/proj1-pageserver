@@ -12,7 +12,7 @@
   located in ./pages  (where '.' is the directory from which this
   program is run).
 """
-
+import os
 import config    # Configure from .ini files and command line
 import logging   # Better than print statements
 logging.basicConfig(format='%(levelname)s:%(message)s',
@@ -82,17 +82,44 @@ def respond(sock):
     """
     This server responds only to GET requests (not PUT, POST, or UPDATE).
     Any valid GET request is answered with an ascii graphic of a cat.
+
     """
+
     sent = 0
     request = sock.recv(1024)  # We accept only short requests
     request = str(request, encoding='utf-8', errors='strict')
     log.info("--- Received request ----")
     log.info("Request was {}\n***\n".format(request))
 
+
     parts = request.split()
+
+    #print(source_path)
+
+
     if len(parts) > 1 and parts[0] == "GET":
+        command = parts[1]
         transmit(STATUS_OK, sock)
-        transmit(CAT, sock)
+
+        #checking format
+        #transmit(CAT, sock)
+        if  ("//" or "~" or "..") in parts[1]:
+            transmit(STATUS_FORBIDDEN, sock)
+    
+        elif (command.endswith("html") or command.endswith("css")):
+            paths =  command[1:]
+            source_path = os.path.join(DOCROOT, paths)
+            log.debug("Source path: {}".format(source_path))
+            try:
+                with open(source_path, 'r', encoding='utf-8') as source:
+                    for line in source:
+                        transmit(line.strip(), sock)
+            except FileNotFoundError as error:
+                log.warn("Failed to open or read file")
+                log.warn("Requested file was {}".format(source_path))
+                log.warn("Exception: {}".format(error))
+        else:
+        	transmit(STATUS_FORBIDDEN, sock)
     else:
         log.info("Unhandled request: {}".format(request))
         transmit(STATUS_NOT_IMPLEMENTED, sock)
@@ -136,7 +163,9 @@ def get_options():
 
 
 def main():
+    global DOCROOT
     options = get_options()
+    DOCROOT = options.DOCROOT
     port = options.PORT
     if options.DEBUG:
         log.setLevel(logging.DEBUG)
